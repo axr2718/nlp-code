@@ -5,20 +5,26 @@ def n_gram(tokens, n):
 
     return n_grams
 
+def normalization_constant(counter, token, n):
+    if n > 1:
+        normalization_constant = 0
+        for bigram in counter.keys():
+            if token == bigram.split()[0]:
+                normalization_constant += counter[bigram]
+    else: normalization_constant = sum(counter.values())
+
 if __name__ == '__main__':
     train_path = './A1_DATASET/train.txt'
     val_path  = './A1_DATASET/val.txt'
 
-    n = 5
+    n = 1
     n_grams = []
 
     with open(train_path, 'r', encoding='utf-8') as file:
         for line in file:
             tokens = line.lower().split()
             n_grams.extend(n_gram(tokens, n))
-
-    #print(n_grams)
     
     counter = Counter(n_grams)
 
-    print(counter)
+    print(len(counter.keys()))
