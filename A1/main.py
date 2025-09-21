@@ -18,6 +18,50 @@ def normalization_constant(counter, token, n):
     else: normalization_constant = sum(counter.values())
     return normalization_constant
 
+def process_unknown_words(
+    linestokens: List[List[str]],
+    vocab: List[str] = None,
+    threshold: int = 1,
+    is_train: bool = True
+) -> Tuple[List[List[str]], List[str]]:
+    """
+    For training:
+      - Replace tokens with freq <= threshold with <UNK>, build vocab
+    For evaluation:
+      - Replace tokens not in vocab with <UNK>
+    
+    Args:
+      linestokens: List of token lists (sentences)
+      vocab: vocabulary to enforce for evaluation; ignored if training
+      threshold: freq threshold for rare-word replacement in training
+      is_train: True if training mode, False for val/test mode
+    
+    Returns:
+      replaced tokens, vocabulary list (for training), or same vocab for evaluation
+    """
+    if is_train:
+        token_freq = Counter()
+        for tokens in linestokens:
+            token_freq.update(tokens)
+        vocab_set = set(tok for tok, freq in token_freq.items() if freq > threshold)
+        vocab_set.add('<UNK>')
+
+        replaced_lines = []
+        for tokens in linestokens:
+            new_tokens = [tok if tok in vocab_set else '<UNK>' for tok in tokens]
+            replaced_lines.append(new_tokens)
+
+        return replaced_lines, sorted(vocab_set)
+    else:
+        if vocab is None:
+            raise ValueError("Vocabulary must be provided for evaluation mode")
+        vocab_set = set(vocab)
+        replaced_lines = []
+        for tokens in linestokens:
+            new_tokens = [tok if tok in vocab_set else '<UNK>' for tok in tokens]
+            replaced_lines.append(new_tokens)
+        return replaced_lines, vocab
+
 # ----------------------------
 # Byte Pair Encoding (BPE)
 # ----------------------------
@@ -147,23 +191,47 @@ def corpus_perplexity_unigram(linestokens: List[List[str]], unigram_counts: Coun
     avg_neg_log_prob = -log_prob_sum / token_count
     return math.exp(avg_neg_log_prob)
 
-def unigram_wrapper(train_path: str, val_path: str, lower: bool, use_bpe: bool, num_merges: int, alpha: float) -> None:
-
-    # Unigram model
-    # Always learn BPE merges if BPE enabled
+def unigram_wrapper(
+    train_path: str,
+    val_path: str,
+    lower: bool,
+    use_bpe: bool,
+    num_merges: int,
+    alpha: float,
+    unk_threshold: int = 1
+) -> Tuple[float, float]:
     merges_rank = {}
     if use_bpe:
         word_freqs = read_word_frequencies(train_path, lowercase=lower)
-        merges_rank = learn_bpe(word_freqs, num_merges=args.num_merges)
+        merges_rank = learn_bpe(word_freqs, num_merges=num_merges)
 
+    # Tokenize train and validation data without unknown word replacement
     train_lines = read_tokenized_lines(train_path, use_bpe=use_bpe, merges_rank=merges_rank, lowercase=lower)
     val_lines = read_tokenized_lines(val_path, use_bpe=use_bpe, merges_rank=merges_rank, lowercase=lower)
 
-    unigram_counts = train_unigram_model(train_lines)
-    vocab = list(unigram_counts.keys())
-    ppl = corpus_perplexity_unigram(val_lines, unigram_counts, len(vocab), alpha)
+    # Train unigram counts directly (no unknown word handling)
+    unigram_counts_no_unk = train_unigram_model(train_lines)
+    vocab_no_unk = list(unigram_counts_no_unk.keys())
+
+    # Calculate perplexity without unknown word handling
+    ppl_no_unk = corpus_perplexity_unigram(val_lines, unigram_counts_no_unk, len(vocab_no_unk), alpha)
+
+    # Replace rare words by <UNK> in train, build vocab
+    train_replaced, vocab_with_unk = process_unknown_words(train_lines, threshold=unk_threshold, is_train=True)
+    # Replace OOV tokens in validation with <UNK>
+    val_replaced, _ = process_unknown_words(val_lines, vocab=vocab_with_unk, is_train=False)
+
+    unigram_counts_unk = train_unigram_model(train_replaced)
+    # Calculate perplexity with unknown word handling
+    ppl_with_unk = corpus_perplexity_unigram(val_replaced, unigram_counts_unk, len(vocab_with_unk), alpha)
+
     label = 'BPE' if use_bpe else 'whitespace'
-    print(f'Perplexity (unigram, {label}): {ppl:.4f}')
+    print(f'Perplexity (unigram with unknown words, {label}): {ppl_no_unk:.4f}')
+    print(f'Perplexity (unigram without unknown words, {label}): {ppl_with_unk:.4f}')
+
+    return ppl_no_unk, ppl_with_unk
+
+
 
 # ----------------------------
 # Bigram Language Model utils
@@ -334,11 +402,11 @@ if __name__ == '__main__':
             # Compare unigram models with and without BPE
             unigram_wrapper(train_path, val_path, lower, use_bpe=False, num_merges=args.num_merges, alpha=args.alpha)
             unigram_wrapper(train_path, val_path, lower, use_bpe=True, num_merges=args.num_merges, alpha=args.alpha)
-        unigram_wrapper(train_path, val_path, lower, use_bpe, args.num_merges, args.alpha)
+        else:
+            unigram_wrapper(train_path, val_path, lower, use_bpe, args.num_merges, args.alpha)
         exit(0)
     elif n_value == 2:
         pass
-
 
     # Bigram model with BPE comparison mode
     # Comparison mode: always build bigram models with and without BPE and report perplexity
