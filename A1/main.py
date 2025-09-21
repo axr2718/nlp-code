@@ -147,6 +147,23 @@ def corpus_perplexity_unigram(linestokens: List[List[str]], unigram_counts: Coun
     avg_neg_log_prob = -log_prob_sum / token_count
     return math.exp(avg_neg_log_prob)
 
+def unigram_wrapper(train_path: str, val_path: str, lower: bool, use_bpe: bool, num_merges: int, alpha: float) -> None:
+
+    # Unigram model
+    # Always learn BPE merges if BPE enabled
+    merges_rank = {}
+    if use_bpe:
+        word_freqs = read_word_frequencies(train_path, lowercase=lower)
+        merges_rank = learn_bpe(word_freqs, num_merges=args.num_merges)
+
+    train_lines = read_tokenized_lines(train_path, use_bpe=use_bpe, merges_rank=merges_rank, lowercase=lower)
+    val_lines = read_tokenized_lines(val_path, use_bpe=use_bpe, merges_rank=merges_rank, lowercase=lower)
+
+    unigram_counts = train_unigram_model(train_lines)
+    vocab = list(unigram_counts.keys())
+    ppl = corpus_perplexity_unigram(val_lines, unigram_counts, len(vocab), alpha)
+    label = 'BPE' if use_bpe else 'whitespace'
+    print(f'Perplexity (unigram, {label}): {ppl:.4f}')
 
 # ----------------------------
 # Bigram Language Model utils
@@ -313,36 +330,14 @@ if __name__ == '__main__':
 
     # Unigram model
     if n_value == 1:
-        # Always learn BPE merges if BPE enabled
-        merges_rank = {}
-        if args.use_bpe:
-            word_freqs = read_word_frequencies(train_path, lowercase=lower)
-            merges_rank = learn_bpe(word_freqs, num_merges=args.num_merges)
-        
-        # Tokenize with whitespace (no BPE)
-        train_lines_plain = read_tokenized_lines(train_path, use_bpe=False, merges_rank={}, lowercase=lower)
-        val_lines_plain = read_tokenized_lines(val_path, use_bpe=False, merges_rank={}, lowercase=lower)
-
-        unigram_counts_plain = train_unigram_model(train_lines_plain)
-        vocab_plain = build_vocabulary(train_lines_plain)
-        ppl_plain = corpus_perplexity_unigram(val_lines_plain, unigram_counts_plain, len(vocab_plain), args.alpha)
-
-        print(f'Perplexity (unigram, whitespace): {ppl_plain:.4f}')
-
-        # If BPE enabled, also tokenize with BPE and evaluate
-        if args.use_bpe:
-            train_lines_bpe = read_tokenized_lines(train_path, use_bpe=True, merges_rank=merges_rank, lowercase=lower)
-            val_lines_bpe = read_tokenized_lines(val_path, use_bpe=True, merges_rank=merges_rank, lowercase=lower)
-
-            unigram_counts_bpe = train_unigram_model(train_lines_bpe)
-            vocab_bpe = build_vocabulary(train_lines_bpe)
-            ppl_bpe = corpus_perplexity_unigram(val_lines_bpe, unigram_counts_bpe, len(vocab_bpe), args.alpha)
-
-            print(f'Perplexity (unigram, BPE): {ppl_bpe:.4f}')
-        else:
-            print("BPE not enabled; skipping BPE unigram model.")
+        if args.compare_bpe:
+            # Compare unigram models with and without BPE
+            unigram_wrapper(train_path, val_path, lower, use_bpe=False, num_merges=args.num_merges, alpha=args.alpha)
+            unigram_wrapper(train_path, val_path, lower, use_bpe=True, num_merges=args.num_merges, alpha=args.alpha)
+        unigram_wrapper(train_path, val_path, lower, use_bpe, args.num_merges, args.alpha)
         exit(0)
-
+    elif n_value == 2:
+        pass
 
 
     # Bigram model with BPE comparison mode
