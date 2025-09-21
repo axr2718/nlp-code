@@ -2,6 +2,7 @@ from collections import Counter
 import argparse
 from typing import Dict, List, Tuple
 import random
+import math
 
 def n_gram(tokens, n):
     n_grams = [' '.join(tokens[i : i + n]) for i in range(len(tokens) - n + 1)]
@@ -114,6 +115,39 @@ def tokenize_line(line: str, use_bpe: bool, merges_rank: Dict[Tuple[str, str], i
         tokens.extend(bpe_encode_word(w, merges_rank))
     return tokens
 
+
+# ----------------------------
+# Unigram Language Model
+# ----------------------------
+
+def train_unigram_model(linestokens: List[List[str]]) -> Counter:
+    """Count unigram occurrences from tokenized lines."""
+    unigram_counts = Counter()
+    for tokens in linestokens:
+        unigram_counts.update(tokens)
+    return unigram_counts
+
+def unigram_prob(token: str, unigram_counts: Counter, vocab_size: int, alpha: float) -> float:
+    """Calculate smoothed unigram probability with additive smoothing."""
+    token_count = unigram_counts.get(token, 0)
+    total_tokens = sum(unigram_counts.values())
+    return (token_count + alpha) / (total_tokens + alpha * vocab_size)
+
+def corpus_perplexity_unigram(linestokens: List[List[str]], unigram_counts: Counter, vocab_size: int, alpha: float) -> float:
+    """Calculate perplexity of unigram model on a tokenized corpus."""
+    log_prob_sum = 0.0
+    token_count = 0
+    for tokens in linestokens:
+        for token in tokens:
+            p = unigram_prob(token, unigram_counts, vocab_size, alpha)
+            log_prob_sum += math.log(p + 1e-12)  # small constant for numerical stability
+            token_count += 1
+    if token_count == 0:
+        return float('inf')
+    avg_neg_log_prob = -log_prob_sum / token_count
+    return math.exp(avg_neg_log_prob)
+
+
 # ----------------------------
 # Bigram Language Model utils
 # ----------------------------
@@ -157,7 +191,6 @@ def bigram_prob(h: str, w: str, bigram_counts: Counter, context_counts: Counter,
     return (count_hw + alpha) / (count_h + alpha * vocab_size)
 
 def corpus_perplexity(lines_tokens: List[List[str]], bigram_counts: Counter, context_counts: Counter, vocab_size: int, alpha: float) -> float:
-    import math
     log_prob_sum = 0.0
     token_count = 0
     for toks in lines_tokens:
@@ -278,6 +311,41 @@ if __name__ == '__main__':
     use_bpe = args.use_bpe
     lower = args.lower
 
+    # Unigram model
+    if n_value == 1:
+        # Always learn BPE merges if BPE enabled
+        merges_rank = {}
+        if args.use_bpe:
+            word_freqs = read_word_frequencies(train_path, lowercase=lower)
+            merges_rank = learn_bpe(word_freqs, num_merges=args.num_merges)
+        
+        # Tokenize with whitespace (no BPE)
+        train_lines_plain = read_tokenized_lines(train_path, use_bpe=False, merges_rank={}, lowercase=lower)
+        val_lines_plain = read_tokenized_lines(val_path, use_bpe=False, merges_rank={}, lowercase=lower)
+
+        unigram_counts_plain = train_unigram_model(train_lines_plain)
+        vocab_plain = build_vocabulary(train_lines_plain)
+        ppl_plain = corpus_perplexity_unigram(val_lines_plain, unigram_counts_plain, len(vocab_plain), args.alpha)
+
+        print(f'Perplexity (unigram, whitespace): {ppl_plain:.4f}')
+
+        # If BPE enabled, also tokenize with BPE and evaluate
+        if args.use_bpe:
+            train_lines_bpe = read_tokenized_lines(train_path, use_bpe=True, merges_rank=merges_rank, lowercase=lower)
+            val_lines_bpe = read_tokenized_lines(val_path, use_bpe=True, merges_rank=merges_rank, lowercase=lower)
+
+            unigram_counts_bpe = train_unigram_model(train_lines_bpe)
+            vocab_bpe = build_vocabulary(train_lines_bpe)
+            ppl_bpe = corpus_perplexity_unigram(val_lines_bpe, unigram_counts_bpe, len(vocab_bpe), args.alpha)
+
+            print(f'Perplexity (unigram, BPE): {ppl_bpe:.4f}')
+        else:
+            print("BPE not enabled; skipping BPE unigram model.")
+        exit(0)
+
+
+
+    # Bigram model with BPE comparison mode
     # Comparison mode: always build bigram models with and without BPE and report perplexity
     if args.compare_bpe:
         # Learn BPE merges on training data
