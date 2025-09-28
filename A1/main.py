@@ -226,8 +226,8 @@ def unigram_wrapper(
     ppl_with_unk = corpus_perplexity_unigram(val_replaced, unigram_counts_unk, len(vocab_with_unk), alpha)
 
     label = 'BPE' if use_bpe else 'whitespace'
-    print(f'Perplexity (unigram with unknown words, {label}): {ppl_no_unk:.4f}')
-    print(f'Perplexity (unigram without unknown words, {label}): {ppl_with_unk:.4f}')
+    print(f'Perplexity (unigram without unknown-word handling, {label}): {ppl_no_unk:.4f}')
+    print(f'Perplexity (unigram with unknown-word handling, {label}): {ppl_with_unk:.4f}')
 
     return ppl_no_unk, ppl_with_unk
 
