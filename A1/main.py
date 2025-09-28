@@ -271,8 +271,13 @@ def train_bigram_model(lines_tokens: List[List[str]]) -> Tuple[Counter, Counter,
 
 def bigram_prob(h: str, w: str, bigram_counts: Counter, context_counts: Counter, vocab_size: int, alpha: float) -> float:
     # Additive smoothing
+    alpha = float(alpha)
     count_hw = bigram_counts.get((h, w), 0)
     count_h = context_counts.get(h, 0)
+
+    # Avoid division by zero if h is unseen and alpha=0
+    if (count_h + alpha * vocab_size) == 0:
+        return 0.0
     return (count_hw + alpha) / (count_h + alpha * vocab_size)
 
 def corpus_perplexity(lines_tokens: List[List[str]], bigram_counts: Counter, context_counts: Counter, vocab_size: int, alpha: float) -> float:
