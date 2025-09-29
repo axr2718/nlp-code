@@ -257,6 +257,39 @@ def build_vocabulary(lines_tokens: List[List[str]]) -> List[str]:
             vocab_set.add(t)
     return sorted(vocab_set)
 
+def bigram_wrapper(train_path: str, val_path: str, lower: bool, use_bpe: bool, num_merges: int, alpha: float, unk_threshold: int = None) -> float:
+    merges = {}
+    if use_bpe:
+        word_freqs = read_word_frequencies(train_path, lowercase=lower)
+        merges = learn_bpe(word_freqs, num_merges=num_merges)
+
+    train_lines = read_tokenized_lines(train_path, use_bpe=use_bpe, merges_rank=merges, lowercase=lower)
+    val_lines   = read_tokenized_lines(val_path,   use_bpe=use_bpe, merges_rank=merges, lowercase=lower)
+
+    if unk_threshold is None:
+        bigr, ctx, vocab = train_bigram_model(train_lines)
+        ppl = corpus_perplexity(val_lines, bigr, ctx, len(vocab), alpha)
+        label = 'BPE' if use_bpe else 'whitespace'
+        print(f'Perplexity (bigram, {label}, no UNK, alpha={alpha}): {ppl:.4f}')
+        return ppl
+    else:
+        # unknown word handling
+        train_words = [[t for t in s if t not in {BOS, EOS}] for s in train_lines]
+        val_words   = [[t for t in s if t not in {BOS, EOS}] for s in val_lines]
+
+        train_u, vocab_u = process_unknown_words(train_words, threshold=unk_threshold, is_train=True)
+        vocab_u = sorted(set(vocab_u) | {BOS, EOS})
+        val_u, _ = process_unknown_words(val_words, vocab=vocab_u, is_train=False)
+
+        train_u = [[BOS] + s + [EOS] if (not s or s[0] != BOS) else s for s in train_u]
+        val_u   = [[BOS] + s + [EOS] if (not s or s[0] != BOS) else s for s in val_u]
+
+        bigr_u, ctx_u, _ = train_bigram_model(train_u)
+        ppl_u = corpus_perplexity(val_u, bigr_u, ctx_u, len(vocab_u), alpha)
+        label = 'BPE' if use_bpe else 'whitespace'
+        print(f'Perplexity (bigram, {label}, UNK<={unk_threshold}, alpha={alpha}): {ppl_u}')
+        return ppl_u
+
 def train_bigram_model(lines_tokens: List[List[str]]) -> Tuple[Counter, Counter, List[str]]:
     bigram_counts: Counter = Counter()
     context_counts: Counter = Counter()
