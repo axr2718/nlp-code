@@ -452,6 +452,7 @@ if __name__ == '__main__':
     parser.add_argument('--top_k', type=int, default=0, help='Top-k sampling in REPL (0 disables)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for REPL sampling')
     parser.add_argument('--no-lower', dest='lower', action='store_false', help='Disable lowercasing')
+    parser.add_argument('--unk_threshold', type=int, default=None, help='Replace OOV with <UNK> if freq <= this value')
 
     # Evaluation
     parser.add_argument('--run_simple_grid', action='store_true', help='Run grid of bigram experiments and print table')
@@ -537,17 +538,45 @@ if __name__ == '__main__':
                 print(len(counter.keys()))
             else:
                 # Single bigram model path according to --use_bpe
-                merges_rank: Dict[Tuple[str, str], int] = {}
-                if use_bpe:
-                    word_freqs = read_word_frequencies(train_path, lowercase=lower)
-                    merges_rank = learn_bpe(word_freqs, num_merges=args.num_merges)
 
-                train_lines = read_tokenized_lines(train_path, use_bpe=use_bpe, merges_rank=merges_rank, lowercase=lower)
-                val_lines = read_tokenized_lines(val_path, use_bpe=use_bpe, merges_rank=merges_rank, lowercase=lower)
-
-                bigram_counts, context_counts, vocab = train_bigram_model(train_lines)
-                ppl = corpus_perplexity(val_lines, bigram_counts, context_counts, len(vocab), args.alpha)
-                label = 'BPE' if use_bpe else 'whitespace'
-                print(f'Perplexity (bigram, {label}): {ppl:.4f}')
+                # Fallback to old code for repl
                 if args.repl:
+                    merges_rank: Dict[Tuple[str, str], int] = {}
+                    if use_bpe:
+                        word_freqs = read_word_frequencies(train_path, lowercase=lower)
+                        merges_rank = learn_bpe(word_freqs, num_merges=args.num_merges)
+
+                    train_lines = read_tokenized_lines(train_path, use_bpe=use_bpe, merges_rank=merges_rank, lowercase=lower)
+                    val_lines = read_tokenized_lines(val_path, use_bpe=use_bpe, merges_rank=merges_rank, lowercase=lower)
+
+                    bigram_counts, context_counts, vocab = train_bigram_model(train_lines)
+                    ppl = corpus_perplexity(val_lines, bigram_counts, context_counts, len(vocab), args.alpha)
+                    label = 'BPE' if use_bpe else 'whitespace'
+                    print(f'Perplexity (bigram, {label}): {ppl:.4f}')
+
                     interactive_session(bigram_counts, context_counts, vocab, merges_rank=merges_rank, use_bpe=use_bpe, lowercase=lower, alpha=args.alpha, max_len=args.max_len, temperature=args.temperature, top_k=args.top_k, seed=args.seed)
+
+                # With unknown word handling and parse-friendly output for eval notebook
+                else:
+                    label = 'BPE' if use_bpe else 'whitespace'
+                    ppl = bigram_wrapper(
+                        train_path=train_path,
+                        val_path=val_path,
+                        lower=lower,
+                        use_bpe=use_bpe,
+                        num_merges=args.num_merges,
+                        alpha=args.alpha,
+                        unk_threshold=args.unk_threshold
+                    )
+                    
+                    print(",".join([
+                        "RESULT",
+                        "bigram",
+                        "with_unk" if args.unk_threshold is not None else "no_unk",
+                        label,
+                        f'alpha={args.alpha}',
+                        f'unk={args.unk_threshold if args.unk_threshold is not None else "-"}',
+                        f'merges={args.num_merges}',
+                        f'lower={lower}',
+                        f'ppl={ppl:.6f}'
+                    ]))
