@@ -122,7 +122,7 @@ if __name__ == "__main__":
     
 
     model = FFNN(input_dim = len(vocab), h = args.hidden_dim)
-    optimizer = optim.SGD(model.parameters(),lr=0.01, momentum=0.9)
+    optimizer = optim.SGD(model.parameters(),lr=0.001, momentum=0.9)
     print("========== Training for {} epochs ==========".format(args.epochs))
     for epoch in range(args.epochs):
         model.train()
