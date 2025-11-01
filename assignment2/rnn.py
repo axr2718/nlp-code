@@ -30,14 +30,21 @@ class RNN(nn.Module):
         return self.loss(predicted_vector, gold_label)
 
     def forward(self, inputs):
-        # [to fill] obtain hidden layer representation (https://pytorch.org/docs/stable/generated/torch.nn.RNN.html)
+        #print(f'Inputs shape: {inputs.shape}')
         output, _ = self.rnn(inputs)
-        # [to fill] obtain output layer representations
+        #print(f'Outputs shape: {output.shape}')
+        #print(f'Final hidden shape: {_.shape}')
+
         z_t = self.W(output)
-        # [to fill] sum over output 
+        #print(f'z_k shape: {z_t.shape}')
+
         z = torch.sum(z_t, dim=0)
-        # [to fill] obtain probability dist.
+        #print(f'final z shape: {z.shape}')
+        #exit(0)
+
+ 
         predicted_vector = self.softmax(z)
+
         return predicted_vector
 
 
@@ -80,7 +87,7 @@ if __name__ == "__main__":
     model = RNN(50, args.hidden_dim)  # Fill in parameters
     # optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
     optimizer = optim.Adam(model.parameters(), lr=0.01)
-    word_embedding = pickle.load(open('./word_embedding.pkl', 'rb'))
+    word_embedding = pickle.load(open('./Data_Embedding/word_embedding.pkl', 'rb'))
 
     stopping_condition = False
     epoch = 0
@@ -96,8 +103,9 @@ if __name__ == "__main__":
         train_data = train_data
         correct = 0
         total = 0
-        minibatch_size = 16
+        minibatch_size = 1
         N = len(train_data)
+
 
         loss_total = 0
         loss_count = 0
@@ -107,7 +115,7 @@ if __name__ == "__main__":
             for example_index in range(minibatch_size):
                 input_words, gold_label = train_data[minibatch_index * minibatch_size + example_index]
                 input_words = " ".join(input_words)
-
+ 
                 # Remove punctuation
                 input_words = input_words.translate(input_words.maketrans("", "", string.punctuation)).split()
 
@@ -115,7 +123,7 @@ if __name__ == "__main__":
                 vectors = [word_embedding[i.lower()] if i.lower() in word_embedding.keys() else word_embedding['unk'] for i in input_words ]
 
                 # Transform the input into required shape
-                vectors = torch.tensor(vectors).view(len(vectors), 1, -1)
+                vectors = torch.tensor(vectors, dtype=torch.float32).view(len(vectors), 1, -1)
                 output = model(vectors)
 
                 # Get loss
@@ -133,7 +141,7 @@ if __name__ == "__main__":
                     loss += example_loss
 
             loss = loss / minibatch_size
-            loss_total += loss.data
+            loss_total += loss.item()
             loss_count += 1
             loss.backward()
             optimizer.step()
@@ -144,35 +152,36 @@ if __name__ == "__main__":
 
 
         model.eval()
-        correct = 0
-        total = 0
-        random.shuffle(valid_data)
-        print("Validation started for epoch {}".format(epoch + 1))
-        valid_data = valid_data
+        with torch.no_grad():
+            correct = 0
+            total = 0
+            random.shuffle(valid_data)
+            print("Validation started for epoch {}".format(epoch + 1))
+            valid_data = valid_data
 
-        for input_words, gold_label in tqdm(valid_data):
-            input_words = " ".join(input_words)
-            input_words = input_words.translate(input_words.maketrans("", "", string.punctuation)).split()
-            vectors = [word_embedding[i.lower()] if i.lower() in word_embedding.keys() else word_embedding['unk'] for i
-                       in input_words]
+            for input_words, gold_label in tqdm(valid_data):
+                input_words = " ".join(input_words)
+                input_words = input_words.translate(input_words.maketrans("", "", string.punctuation)).split()
+                vectors = [word_embedding[i.lower()] if i.lower() in word_embedding.keys() else word_embedding['unk'] for i
+                        in input_words]
 
-            vectors = torch.tensor(vectors).view(len(vectors), 1, -1)
-            output = model(vectors)
-            predicted_label = torch.argmax(output)
-            correct += int(predicted_label == gold_label)
-            total += 1
-            # print(predicted_label, gold_label)
-        print("Validation completed for epoch {}".format(epoch + 1))
-        print("Validation accuracy for epoch {}: {}".format(epoch + 1, correct / total))
-        validation_accuracy = correct/total
+                vectors = torch.tensor(vectors, dtype=torch.float32).view(len(vectors), 1, -1)
+                output = model(vectors)
+                predicted_label = torch.argmax(output)
+                correct += int(predicted_label == gold_label)
+                total += 1
+                # print(predicted_label, gold_label)
+            print("Validation completed for epoch {}".format(epoch + 1))
+            print("Validation accuracy for epoch {}: {}".format(epoch + 1, correct / total))
+            validation_accuracy = correct/total
 
-        if validation_accuracy < last_validation_accuracy and trainning_accuracy > last_train_accuracy:
-            stopping_condition=True
-            print("Training done to avoid overfitting!")
-            print("Best validation accuracy is:", last_validation_accuracy)
-        else:
-            last_validation_accuracy = validation_accuracy
-            last_train_accuracy = trainning_accuracy
+            if validation_accuracy < last_validation_accuracy and trainning_accuracy > last_train_accuracy:
+                stopping_condition=True
+                print("Training done to avoid overfitting!")
+                print("Best validation accuracy is:", last_validation_accuracy)
+            else:
+                last_validation_accuracy = validation_accuracy
+                last_train_accuracy = trainning_accuracy
 
         epoch += 1
 

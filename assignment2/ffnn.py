@@ -31,12 +31,12 @@ class FFNN(nn.Module):
         return self.loss(predicted_vector, gold_label)
 
     def forward(self, input_vector):
-        # [to fill] obtain first hidden layer representation
         hidden = self.activation(self.W1(input_vector))
-        # [to fill] obtain output layer representation
+
         output = self.W2(hidden)
-        # [to fill] obtain probability dist.
+
         predicted_vector = self.softmax(output)
+        
         return predicted_vector
 
 
@@ -133,7 +133,7 @@ if __name__ == "__main__":
         start_time = time.time()
         print("Training started for epoch {}".format(epoch + 1))
         random.shuffle(train_data) # Good practice to shuffle order of training data
-        minibatch_size = 16 
+        minibatch_size = 16
         N = len(train_data) 
         for minibatch_index in tqdm(range(N // minibatch_size)):
             optimizer.zero_grad()
@@ -162,26 +162,27 @@ if __name__ == "__main__":
         total = 0
         start_time = time.time()
         print("Validation started for epoch {}".format(epoch + 1))
-        minibatch_size = 16 
-        N = len(valid_data) 
-        for minibatch_index in tqdm(range(N // minibatch_size)):
-            optimizer.zero_grad()
-            loss = None
-            for example_index in range(minibatch_size):
-                input_vector, gold_label = valid_data[minibatch_index * minibatch_size + example_index]
-                predicted_vector = model(input_vector)
-                predicted_label = torch.argmax(predicted_vector)
-                correct += int(predicted_label == gold_label)
-                total += 1
-                example_loss = model.compute_Loss(predicted_vector.view(1,-1), torch.tensor([gold_label]))
-                if loss is None:
-                    loss = example_loss
-                else:
-                    loss += example_loss
-            loss = loss / minibatch_size
-        print("Validation completed for epoch {}".format(epoch + 1))
-        print("Validation accuracy for epoch {}: {}".format(epoch + 1, correct / total))
-        print("Validation time for this epoch: {}".format(time.time() - start_time))
+        with torch.no_grad():
+            minibatch_size = 16
+            N = len(valid_data) 
+            for minibatch_index in tqdm(range(N // minibatch_size)):
+                optimizer.zero_grad()
+                loss = None
+                for example_index in range(minibatch_size):
+                    input_vector, gold_label = valid_data[minibatch_index * minibatch_size + example_index]
+                    predicted_vector = model(input_vector)
+                    predicted_label = torch.argmax(predicted_vector)
+                    correct += int(predicted_label == gold_label)
+                    total += 1
+                    example_loss = model.compute_Loss(predicted_vector.view(1,-1), torch.tensor([gold_label]))
+                    if loss is None:
+                        loss = example_loss
+                    else:
+                        loss += example_loss
+                loss = loss / minibatch_size
+            print("Validation completed for epoch {}".format(epoch + 1))
+            print("Validation accuracy for epoch {}: {}".format(epoch + 1, correct / total))
+            print("Validation time for this epoch: {}".format(time.time() - start_time))
 
     # write out to results/test.out
     
