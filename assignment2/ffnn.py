@@ -198,9 +198,7 @@ def hyperparameter_search(train_data, valid_data, vocab_size, search_epochs=10):
     from itertools import product
     import pickle
     
-    print("\n" + "="*80)
-    print("HYPERPARAMETER SEARCH")
-    print("="*80)
+    print("\nStarting hyperparameter search...")
     
     # Define search grid
     hidden_dims = [32, 64, 128, 256]
@@ -208,11 +206,8 @@ def hyperparameter_search(train_data, valid_data, vocab_size, search_epochs=10):
     momentums = [0.85, 0.9, 0.95]
     
     total_configs = len(hidden_dims) * len(learning_rates) * len(momentums)
-    print(f"Testing {total_configs} configurations with {search_epochs} epochs each...")
-    print(f"Hidden dims: {hidden_dims}")
-    print(f"Learning rates: {learning_rates}")
-    print(f"Momentums: {momentums}")
-    print("="*80 + "\n")
+    print(f"Will test {total_configs} different configurations, training each for {search_epochs} epochs")
+    print(f"Search space: hidden dims {hidden_dims}, learning rates {learning_rates}, momentum values {momentums}\n")
     
     results = []
     best_val_acc = 0
@@ -223,7 +218,7 @@ def hyperparameter_search(train_data, valid_data, vocab_size, search_epochs=10):
     
     for hidden, lr, momentum in product(hidden_dims, learning_rates, momentums):
         config_num += 1
-        print(f"[{config_num}/{total_configs}] hidden={hidden}, lr={lr}, momentum={momentum}")
+        print(f"Testing configuration {config_num}/{total_configs}: hidden_dim={hidden}, lr={lr}, momentum={momentum}")
         
         random.seed(42)
         torch.manual_seed(42)
@@ -246,26 +241,24 @@ def hyperparameter_search(train_data, valid_data, vocab_size, search_epochs=10):
         }
         results.append(result)
         
-        print(f"  → Max Val Acc: {max_val_acc*100:.2f}%, Final Val Acc: {final_val_acc*100:.2f}%")
+        print(f"Results: best validation accuracy {max_val_acc*100:.2f}%, final epoch accuracy {final_val_acc*100:.2f}%")
         
         if final_val_acc > best_val_acc:
             best_val_acc = final_val_acc
             best_config = result
             best_model = model
-            print(f"  ✓ New best!")
+            print("New best configuration found!")
         print()
     
     elapsed = time.time() - start_time
-    print("="*80)
-    print(f"Search complete in {elapsed/60:.1f} minutes")
-    print(f"Best: hidden={best_config['hidden_dim']}, lr={best_config['lr']}, momentum={best_config['momentum']}")
-    print(f"Best final validation accuracy: {best_val_acc*100:.2f}%")
-    print("="*80 + "\n")
+    print(f"\nHyperparameter search finished in {elapsed/60:.1f} minutes")
+    print(f"Best configuration found: hidden_dim={best_config['hidden_dim']}, lr={best_config['lr']}, momentum={best_config['momentum']}")
+    print(f"Achieved validation accuracy: {best_val_acc*100:.2f}%\n")
     
     # Save search results
     with open('ffnn_search_results.pkl', 'wb') as f:
         pickle.dump({'best_config': best_config, 'all_results': results}, f)
-    print("Saved: ffnn_search_results.pkl\n")
+    print("Search results saved to ffnn_search_results.pkl\n")
     
     return best_model, best_config, results
 
@@ -278,9 +271,7 @@ def plot_results(metrics, best_config):
         print("WARNING: matplotlib not installed. Run: pip install matplotlib")
         return
     
-    print("="*80)
-    print("GENERATING PLOTS")
-    print("="*80)
+    print("Generating learning curves...")
     
     epochs = range(1, len(metrics['train_losses']) + 1)
     
@@ -311,36 +302,30 @@ def plot_results(metrics, best_config):
     
     plt.tight_layout()
     plt.savefig('ffnn_learning_curves.png', dpi=300, bbox_inches='tight')
-    print("Saved: ffnn_learning_curves.png")
-    print("="*80 + "\n")
+    print("Learning curves saved to ffnn_learning_curves.png\n")
 
 
 def run_hyperparameter_search_pipeline(train_data_file, val_data_file, epochs=10):
     """Complete pipeline: search, train, save, plot"""
     import pickle
     
-    print("\n" + "="*80)
-    print("FFNN HYPERPARAMETER SEARCH PIPELINE")
-    print("="*80)
-    print(f"Training data: {train_data_file}")
-    print(f"Validation data: {val_data_file}")
-    print(f"Epochs: {epochs}")
-    print("="*80 + "\n")
+    print("\nRunning FFNN hyperparameter search")
+    print(f"Using {train_data_file} for training and {val_data_file} for validation")
+    print(f"Each configuration will train for {epochs} epochs\n")
     
     # Load and prepare data
-    print("Loading data...")
+    print("Loading dataset...")
     train_data_raw, valid_data_raw = load_data(train_data_file, val_data_file)
     vocab = make_vocab(train_data_raw)
     vocab, word2index, index2word = make_indices(vocab)
     
-    print(f"Loaded {len(train_data_raw)} training samples")
-    print(f"Loaded {len(valid_data_raw)} validation samples")
-    print(f"Vocabulary size: {len(vocab)}\n")
+    print(f"Found {len(train_data_raw)} training examples and {len(valid_data_raw)} validation examples")
+    print(f"Vocabulary contains {len(vocab)} unique words\n")
     
-    print("Vectorizing data...")
+    print("Converting text to vectors...")
     train_data = convert_to_vector_representation(train_data_raw, word2index)
     valid_data = convert_to_vector_representation(valid_data_raw, word2index)
-    print("Data vectorized\n")
+    print("Data preparation complete\n")
     
     # Hyperparameter search
     best_model, best_config, all_results = hyperparameter_search(
@@ -348,7 +333,7 @@ def run_hyperparameter_search_pipeline(train_data_file, val_data_file, epochs=10
     
     # Save best model
     torch.save(best_model.state_dict(), 'ffnn_best_model.pt')
-    print("Saved model: ffnn_best_model.pt")
+    print("Best model saved to ffnn_best_model.pt")
     
     # Save results
     final_results = {
@@ -358,20 +343,10 @@ def run_hyperparameter_search_pipeline(train_data_file, val_data_file, epochs=10
     }
     with open('ffnn_final_results.pkl', 'wb') as f:
         pickle.dump(final_results, f)
-    print("Saved results: ffnn_final_results.pkl\n")
+    print("Final results saved to ffnn_final_results.pkl\n")
     
     # Plot
     plot_results(best_config['metrics'], best_config)
-    
-    print("\n" + "="*80)
-    print("PIPELINE COMPLETE!")
-    print("="*80)
-    print("\nGenerated files:")
-    print("  - ffnn_search_results.pkl (all search results)")
-    print("  - ffnn_best_model.pt (trained model)")
-    print("  - ffnn_final_results.pkl (best config + metrics)")
-    print("  - ffnn_learning_curves.png (plots)")
-    print("="*80 + "\n")
 
 
 if __name__ == "__main__":
